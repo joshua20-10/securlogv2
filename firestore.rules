@@ -1,0 +1,37 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // La connexion est gérée par l'application (sans Firebase Authentication).
+    // Les règles ne peuvent donc pas identifier l'utilisateur : l'accès aux données est ouvert
+    // à toute personne qui connaît la configuration de l'application. Les règles ci-dessous
+    // protègent seulement l'intégrité des preuves (scans et historiques non modifiables).
+
+    match /users/{id}       { allow read, write: if true; }
+    match /sites/{id}       { allow read, write: if true; }
+    match /rounds/{id}      { allow read, write: if true; }
+    match /checkpoints/{id} { allow read, write: if true; }
+    match /qrSecrets/{id}   { allow read, write: if true; }
+    match /runs/{id}        { allow read, create, update: if true; }
+    match /shifts/{id}      { allow read, create, update: if true; }
+    match /positions/{id}   { allow read, write: if true; }
+    match /sitePlans/{id}   { allow read, write: if true; }
+    match /loginLog/{id}    { allow read, create: if true; }
+    match /helpRequests/{id} { allow read, create, update: if true; }   // demandes d'aide à la connexion
+
+    match /events/{id} {
+      allow read, create, update: if true;       // pas de suppression possible
+      match /history/{hid} { allow read, create: if true; }
+    }
+
+    // Scans : création seule, jeton QR vérifié par le serveur, un seul scan par point et par ronde, heure serveur obligatoire
+    match /scans/{id} {
+      allow read: if true;
+      allow create: if id == request.resource.data.runId + '_' + request.resource.data.checkpointId
+        && request.resource.data.receivedAt == request.time
+        && request.resource.data.scannedAt <= request.time + duration.value(2, 'm')
+        && get(/databases/$(database)/documents/qrSecrets/$(request.resource.data.checkpointId)).data.token == request.resource.data.token;
+      allow update, delete: if false;
+    }
+  }
+}
